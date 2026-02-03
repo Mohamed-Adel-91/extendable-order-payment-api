@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AdminAuthController;
 use App\Http\Controllers\Api\AdminOrderController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PaymentController;
 
 // Admin Auth Routes
 Route::prefix('admin')->group(function () {
@@ -41,4 +42,5 @@ Route::middleware('auth:api')->group(function () {
     Route::post('/orders', [OrderController::class, 'store']);
     Route::put('/orders/{order}', [OrderController::class, 'update']);
     Route::patch('/orders/{order}/cancel', [OrderController::class, 'cancel']);
+    Route::post('/orders/{order}/payments/start', [PaymentController::class, 'start']);
 });
