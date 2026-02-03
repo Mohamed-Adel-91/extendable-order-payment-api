@@ -22,7 +22,7 @@ class CancelOrderRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'reason' => ['required', 'string', 'max:2000'],
+            'cancel_reason' => ['required', 'string', 'max:2000'],
         ];
     }
 }
