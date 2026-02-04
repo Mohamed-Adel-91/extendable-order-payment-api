@@ -6,7 +6,7 @@ Laravel 12 + PHP 8.3 REST API for an extendable orders and payments system. The 
 - Clone the repository.
 
 ```bash
-git clone [<repo-url>](https://github.com/Mohamed-Adel-91/extendable-order-payment-api)
+git clone https://github.com/Mohamed-Adel-91/extendable-order-payment-api
 cd extendable-order-payment-api
 ```
 
