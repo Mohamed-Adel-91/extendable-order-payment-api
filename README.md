@@ -1,59 +1,113 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Extendable Orders & Payments API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel 12 + PHP 8.3 REST API for an extendable orders and payments system. The codebase favors Clean Code/SOLID practices, thin controllers, and a service layer for business logic. Input validation is handled via FormRequest classes.
 
-## About Laravel
+## Setup Instructions
+- Clone the repository.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+```bash
+git clone [<repo-url>](https://github.com/Mohamed-Adel-91/extendable-order-payment-api)
+cd extendable-order-payment-api
+```
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- Install PHP dependencies.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+```bash
+composer install
+```
 
-## Learning Laravel
+- Create and configure `.env`.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+```bash
+copy .env.example .env
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- Update required environment variables.
 
-## Laravel Sponsors
+```env
+JWT_SECRET=
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+KASHIER_DEBUG_MODE=true
+KASHIER_MERCHANT_ID=
+KASHIER_API_KEY=
+KASHIER_SECRET=
+KASHIER_MODE=test
+KASHIER_MERCHANT_REDIRECT=http://127.0.0.1:8000/payment/callback
+KASHIER_MERCHANT_WEBHOOK=http://127.0.0.1:8000/payment/webhook
+KASHIER_CURRENCY=EGP
+KASHIER_LANGUAGE=en
+```
 
-### Premium Partners
+- Generate the application key.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```bash
+php artisan key:generate
+```
 
-## Contributing
+- Run migrations and seeders.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+php artisan migrate --seed
+```
 
-## Code of Conduct
+- Configure JWT.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan jwt:secret
+```
 
-## Security Vulnerabilities
+- Run the application.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php artisan serve
+```
 
-## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Payment Gateway Extensibility
+**Strategy Pattern**
+- Gateways implement `app/Interfaces/PaymentGatewayInterface.php` and are resolved at runtime based on `PaymentMethod`.
+- The registry is `app/Services/payments/PaymentGatewayManager.php`, which maps enum values to concrete gateway classes.
+- The payment workflow is initiated in `app/Services/payments/PaymentService.php`, which delegates to the gateway and stores the returned `payment_url`.
+
+**Key Roles**
+- `PaymentMethod` enum: `app/Enums/PaymentMethod.php` defines gateway identifiers (integer values) using BenSampo Enum.
+- Gateway contract: `app/Interfaces/PaymentGatewayInterface.php` defines `initiate()` and `verifySignature()`.
+- Gateway registry/factory: `app/Services/payments/PaymentGatewayManager.php` resolves the gateway class without controller-level branching.
+
+**How a Payment Is Started**
+1. `PaymentController::start()` validates the request and delegates to `PaymentService::startPayment()`.
+2. `PaymentService` creates a `Payment` in `PENDING` status and calls the resolved gateway.
+3. The gateway builds a `payment_url` (Kashier HPP) and the service stores it on the payment record.
+
+**How Callbacks/Webhooks Are Processed**
+- Redirect callback route: `GET /payment/callback` is defined in `routes/web.php`.
+- `KashierCallbackController` calls `KashierPaymentCallbackService`, which validates required payload fields, verifies the signature, maps the gateway status to internal status, and updates payment + order in a DB transaction with `lockForUpdate`.
+
+### How to Add a New Payment Gateway
+- Add a new integer value to `app/Enums/PaymentMethod.php`.
+- Create a new gateway class implementing `app/Interfaces/PaymentGatewayInterface.php`.
+- Implement payment initialization and signature verification in the gateway.
+- Register the gateway in `app/Services/payments/PaymentGatewayManager.php`.
+- Add gateway configuration keys to `config/payments.php` and `.env`.
+
+For payment initiation, adding a new gateway requires only a new class + enum value + registry entry; no controller or service changes are needed.
+
+For callbacks, create a gateway-specific callback service and route (see `KashierPaymentCallbackService` and `KashierCallbackController` as the reference implementation).
+
+## Callback & Payment Flow Overview
+- **Redirect callback vs webhook**: The project currently implements a redirect callback in `routes/web.php`. Webhook handling can be added with a dedicated controller/service pair following the same pattern.
+- **Signature verification**: `KashierPaymentCallbackService` verifies the signature using HMAC SHA-256 with the configured Kashier API key.
+- **Status mapping**: Gateway status strings are mapped to internal `PaymentStatus` values, and successful payments mark the order as `PAID`.
+- **Idempotency**: Callbacks update the latest payment by `merchant_order_id` inside a transaction. Repeated callbacks re-apply the same status to the same record.
+- **Transactions + row locks**: Order updates are wrapped in `DB::transaction()` and use `lockForUpdate()` to prevent race conditions.
+
+## Additional Notes & Assumptions
+- Authentication uses JWT with separate guards and tables for users (`api`) and admins (`admin_api`).
+- Users can create and pay for orders without admin confirmation.
+- Payments are linked to orders; gateway callbacks update both records.
+- Callbacks may be received multiple times and are expected to be safely repeatable.
+- The gateway is treated as the source of truth for final payment status.
+- Soft deletes are enabled for Users, Admins, and Orders. The Payments table includes `deleted_at`; enable the `SoftDeletes` trait on `Payment` if you want model-level soft deletes.
+- Soft-deleted accounts are excluded from authentication by default Eloquent scopes.
+- Orders with payments are assumed to remain in the system for auditability.
+- Redirect callback is implemented; webhook support can be added using the same service pattern.
