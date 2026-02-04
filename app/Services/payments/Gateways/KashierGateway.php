@@ -5,36 +5,44 @@ namespace App\Services\Payments\Gateways;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Interfaces\PaymentGatewayInterface;
+use Illuminate\Support\Facades\Log;
 
 class KashierGateway implements PaymentGatewayInterface
 {
     public function initiate(Order $order, Payment $payment): string
     {
-        $baseUrl   = rtrim(config('payments.kashier.base_url'), '/');
+        $baseUrl    = rtrim(config('payments.kashier.base_url'), '/');
         $merchantId = (string) config('payments.kashier.merchant_id');
-        $mode      = (string) config('payments.kashier.mode');
-        $currency  = (string) $payment->currency;
-        $amount    = number_format((float) $payment->amount, 2, '.', '');
-        $merchantRedirect = (string) config('payments.kashier.merchant_redirect');
-        $orderRef = (string) $payment->merchant_order_id;
+        $apiKey     = (string) config('payments.kashier.api_key');
+        $mode       = (string) config('payments.kashier.mode');
+        $currency   = strtoupper((string) $payment->currency);
+        $amount     = number_format((float) $payment->amount, 2, '.', '');
+        $merchantRedirect = urlencode((string) config('payments.kashier.merchant_redirect'));
+        $orderRef   = (string) $payment->merchant_order_id;
 
-        $hash = $this->buildHash([
-            'merchantId'       => $merchantId,
-            'order'            => $orderRef,
-            'amount'           => $amount,
-            'currency'         => $currency,
-            'mode'             => $mode,
-            'merchantRedirect' => $merchantRedirect,
-        ]);
+        $path = "/?payment={$merchantId}.{$orderRef}.{$amount}.{$currency}";
+        $hash = hash_hmac('sha256', $path, $apiKey, false);
 
         $query = http_build_query([
             'merchantId'       => $merchantId,
-            'order'            => $orderRef,
+            'orderId'          => $orderRef,
             'amount'           => $amount,
             'currency'         => $currency,
             'mode'             => $mode,
             'merchantRedirect' => $merchantRedirect,
             'hash'             => $hash,
+        ]);
+
+        Log::info('Kashier Hash Generation', [
+            'merchantId'        => $merchantId,
+            'orderId'           => $orderRef,
+            'amount'            => $amount,
+            'currency'          => $currency,
+            'mode'              => $mode,
+            'merchantRedirect'  => $merchantRedirect,
+            'path'              => $path,
+            'secret'            => substr($apiKey, 0, 10) . '...',
+            'hash'              => $hash,
         ]);
 
         return "{$baseUrl}/?{$query}";
@@ -44,22 +52,5 @@ class KashierGateway implements PaymentGatewayInterface
     {
         // webhook/callback
         return true;
-    }
-
-    private function buildHash(array $params): string
-    {
-        $secret = (string) config('payments.kashier.secret');
-
-        $plain = implode('', [
-            $params['merchantId'],
-            $params['order'],
-            $params['amount'],
-            $params['currency'],
-            $params['mode'],
-            $params['merchantRedirect'],
-            $secret,
-        ]);
-
-        return hash('sha256', $plain);
     }
 }
